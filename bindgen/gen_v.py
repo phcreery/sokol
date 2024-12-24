@@ -269,7 +269,7 @@ def type_default_value(s):
 
 def as_c_arg_type(arg_type, prefix):
     if arg_type == "void":
-        return "voidptr"
+        return ""
     elif is_prim_type(arg_type):
         return as_zig_prim_type(arg_type)
     elif is_struct_type(arg_type):
@@ -297,7 +297,7 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
     pre = "" if arg_prefix is None else arg_prefix
     if arg_type == "void":
         if arg_prefix is None:
-            return "voidptr"
+            return "void"
         else:
             return ""
     elif is_prim_type(arg_type):
@@ -347,7 +347,7 @@ def funcptr_args_c(field_type, prefix):
 def funcptr_result_c(field_type):
     res_type = field_type[: field_type.index("(*)")].strip()
     if res_type == "void":
-        return "voidptr"
+        return ""
     elif is_prim_type(res_type):
         return as_zig_prim_type(res_type)
     elif util.is_const_void_ptr(res_type):
@@ -407,8 +407,8 @@ def funcdecl_result_zig(decl, prefix):
 
 def gen_struct(decl, prefix):
     struct_name = check_override(decl["name"])
-    zig_type = as_zig_struct_type(struct_name, prefix)
-    l(f"pub struct {zig_type} {{")
+    # zig_type = as_zig_struct_type(struct_name, prefix)
+    l(f"pub struct C.{struct_name} {{")
     l(f"pub mut:")
     for field in decl["fields"]:
         field_name = check_override(field["name"])
@@ -416,7 +416,8 @@ def gen_struct(decl, prefix):
             f"{struct_name}.{field_name}", default=field["type"]
         )
         if field_name.startswith("_"):
-            field_name = f"internal_{field_name[1:]}"
+            # field_name = f"internal_{field_name[1:]}"
+            continue
         if is_prim_type(field_type):
             l(
                 f"    {field_name} {as_zig_prim_type(field_type)} = {type_default_value(field_type)}"
@@ -428,7 +429,7 @@ def gen_struct(decl, prefix):
                 f"    {field_name} {as_zig_enum_type(field_type, prefix)} = .{enum_default_item(field_type)}"
             )
         elif util.is_string_ptr(field_type):
-            l(f"    {field_name} &u8")
+            l(f"    {field_name} &u8 = unsafe {{ nil }}")
         elif util.is_const_void_ptr(field_type):
             l(f"    {field_name}  voidptr")
         elif util.is_void_ptr(field_type):
@@ -487,6 +488,9 @@ def gen_struct(decl, prefix):
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type}")
     l("}")
+    zig_type = as_zig_struct_type(struct_name, prefix)
+    l(f"pub type {zig_type} = C.{struct_name}")
+    l("")
 
 
 def gen_consts(decl, prefix):
@@ -522,9 +526,12 @@ def gen_func_zig(decl, prefix):
         l(f"pub const {zig_func_name} = {c_func_name}")
     else:
         zig_res_type = funcdecl_result_zig(decl, prefix)
-        l(
-            f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {zig_res_type} {{"
-        )
+        if zig_res_type == "void":
+            l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {{")
+        else:
+            l(
+                f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {zig_res_type} {{"
+            )
         if is_zig_string(zig_res_type):
             # special case: convert C string to Zig string slice
             s = f"    return unsafe {{ cstring_to_vstring(C.{c_func_name}("
