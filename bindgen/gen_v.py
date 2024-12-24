@@ -419,9 +419,15 @@ def gen_struct(decl, prefix):
             # field_name = f"internal_{field_name[1:]}"
             continue
         if is_prim_type(field_type):
-            l(
-                f"    {field_name} {as_zig_prim_type(field_type)} = {type_default_value(field_type)}"
-            )
+            if (
+                type_default_value(field_type) == "0"
+                or type_default_value(field_type) == "false"
+            ):
+                l(f"    {field_name} {as_zig_prim_type(field_type)}")
+            else:
+                l(
+                    f"    {field_name} {as_zig_prim_type(field_type)} = {type_default_value(field_type)}"
+                )
         elif is_struct_type(field_type):
             l(f"    {field_name} {as_zig_struct_type(field_type, prefix)}")
         elif is_enum_type(field_type):
