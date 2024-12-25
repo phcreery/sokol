@@ -1,34 +1,21 @@
 # -------------------------------------------------------------------------------
-#   Generate Zig bindings.
+#   Generate vlang bindings.
 #
-#   Zig coding style:
+#   vlang coding style:
 #   - types are PascalCase
 #   - functions are snake_case
 #   - otherwise snake_case
 # -------------------------------------------------------------------------------
 import gen_ir
-import os, shutil, sys
+import os
+import shutil
+import sys
 
 import gen_util as util
 
 bindings_root = "sokol-v/src"
 c_root = f"{bindings_root}/sokol/c"
 module_root = f"{bindings_root}/sokol"
-
-
-# module_names = {
-#     "slog_": "sv_log",
-#     "sg_": "sv_gfx",
-#     "sapp_": "sv_app",
-#     "stm_": "sv_time",
-#     "saudio_": "sv_audio",
-#     "sgl_": "sv_gl",
-#     "sdtx_": "sv_debugtext",
-#     "sshape_": "sv_shape",
-#     "sglue_": "sv_glue",
-#     "sfetch_": "sv_fetch",
-#     "simgui_": "sv_imgui",
-# }
 
 module_names = {
     "slog_": "svlog",
@@ -65,12 +52,12 @@ ignores = [
     "sg_trace_hooks",
 ]
 
-# functions that need to be exposed as 'raw' C callbacks without a Zig wrapper function
+# functions that need to be exposed as 'raw' C callbacks without a vlang wrapper function
 c_callbacks = ["slog_func"]
 
 # NOTE: syntax for function results: "func_name.RESULT"
 overrides = {
-    "sgl_error": "sgl_get_error",  # 'error' is reserved in Zig
+    "sgl_error": "sgl_get_error",  # 'error' is reserved in vlang
     "sgl_deg": "sgl_as_degrees",
     "sgl_rad": "sgl_as_radians",
     "sg_apply_uniforms.ub_slot": "uint32_t",
@@ -81,7 +68,7 @@ overrides = {
     "sshape_element_range_t.num_elements": "uint32_t",
     "sdtx_font.font_index": "uint32_t",
     "SGL_NO_ERROR": "SGL_ERROR_NO_ERROR",
-    "sfetch_continue": "continue_fetching",  # 'continue' is reserved in Zig
+    "sfetch_continue": "continue_fetching",  # 'continue' is reserved in vlang
     "sfetch_desc": "sfetch_get_desc",  # 'desc' shadowed by earlier definition
 }
 
@@ -166,12 +153,12 @@ def wrap_keywords(s):
         return s
 
 
-def as_zig_prim_type(s):
+def as_vlang_prim_type(s):
     return prim_types[s]
 
 
 # prefix_bla_blub(_t) => (dep.)BlaBlub
-def as_zig_struct_type(s, prefix):
+def as_vlang_struct_type(s, prefix):
     parts = s.lower().split("_")
     outp = "" if s.startswith(prefix) else f"{parts[0]}."
     for part in parts[1:]:
@@ -182,7 +169,7 @@ def as_zig_struct_type(s, prefix):
 
 
 # prefix_bla_blub(_t) => (dep.)BlaBlub
-def as_zig_enum_type(s, prefix, wrap=True):
+def as_vlang_enum_type(s, prefix, wrap=True):
     parts = s.lower().split("_")
     outp = "" if s.startswith(prefix) else f"{parts[0]}."
     for part in parts[1:]:
@@ -271,11 +258,11 @@ def as_c_arg_type(arg_type, prefix):
     if arg_type == "void":
         return ""
     elif is_prim_type(arg_type):
-        return as_zig_prim_type(arg_type)
+        return as_vlang_prim_type(arg_type)
     elif is_struct_type(arg_type):
-        return as_zig_struct_type(arg_type, prefix)
+        return as_vlang_struct_type(arg_type, prefix)
     elif is_enum_type(arg_type):
-        return as_zig_enum_type(arg_type, prefix)
+        return as_vlang_enum_type(arg_type, prefix)
     elif util.is_void_ptr(arg_type):
         return "voidptr"
     elif util.is_const_void_ptr(arg_type):
@@ -283,16 +270,16 @@ def as_c_arg_type(arg_type, prefix):
     elif util.is_string_ptr(arg_type):
         return "&u8"
     elif is_const_struct_ptr(arg_type):
-        return f"&{as_zig_struct_type(util.extract_ptr_type(arg_type), prefix)}"
+        return f"&{as_vlang_struct_type(util.extract_ptr_type(arg_type), prefix)}"
     elif is_prim_ptr(arg_type):
-        return f"&{as_zig_prim_type(util.extract_ptr_type(arg_type))}"
+        return f"&{as_vlang_prim_type(util.extract_ptr_type(arg_type))}"
     elif is_const_prim_ptr(arg_type):
-        return f"&{as_zig_prim_type(util.extract_ptr_type(arg_type))}"
+        return f"&{as_vlang_prim_type(util.extract_ptr_type(arg_type))}"
     else:
         sys.exit(f"Error as_c_arg_type(): {arg_type}")
 
 
-def as_zig_arg_type(arg_prefix, arg_type, prefix):
+def as_vlang_arg_type(arg_prefix, arg_type, prefix):
     # NOTE: if arg_prefix is None, the result is used as return value
     pre = "" if arg_prefix is None else arg_prefix
     if arg_type == "void":
@@ -301,11 +288,11 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
         else:
             return ""
     elif is_prim_type(arg_type):
-        return pre + as_zig_prim_type(arg_type)
+        return pre + as_vlang_prim_type(arg_type)
     elif is_struct_type(arg_type):
-        return pre + as_zig_struct_type(arg_type, prefix)
+        return pre + as_vlang_struct_type(arg_type, prefix)
     elif is_enum_type(arg_type):
-        return pre + as_zig_enum_type(arg_type, prefix)
+        return pre + as_vlang_enum_type(arg_type, prefix)
     elif util.is_void_ptr(arg_type):
         return pre + "voidptr"
     elif util.is_const_void_ptr(arg_type):
@@ -314,17 +301,17 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
         return pre + "string"
     elif is_const_struct_ptr(arg_type):
         # not a bug, pass const structs by value
-        return pre + f"&{as_zig_struct_type(util.extract_ptr_type(arg_type), prefix)}"
+        return pre + f"&{as_vlang_struct_type(util.extract_ptr_type(arg_type), prefix)}"
     elif is_prim_ptr(arg_type):
-        return pre + f"&{as_zig_prim_type(util.extract_ptr_type(arg_type))}"
+        return pre + f"&{as_vlang_prim_type(util.extract_ptr_type(arg_type))}"
     elif is_const_prim_ptr(arg_type):
-        return pre + f"&{as_zig_prim_type(util.extract_ptr_type(arg_type))}"
+        return pre + f"&{as_vlang_prim_type(util.extract_ptr_type(arg_type))}"
     else:
-        sys.exit(f"ERROR as_zig_arg_type(): {arg_type}")
+        sys.exit(f"ERROR as_vlang_arg_type(): {arg_type}")
 
 
-def is_zig_string(zig_type):
-    return zig_type == "string"
+def is_vlang_string(vlang_type):
+    return vlang_type == "string"
 
 
 # get C-style arguments of a function pointer as string
@@ -349,7 +336,7 @@ def funcptr_result_c(field_type):
     if res_type == "void":
         return ""
     elif is_prim_type(res_type):
-        return as_zig_prim_type(res_type)
+        return as_vlang_prim_type(res_type)
     elif util.is_const_void_ptr(res_type):
         return "voidptr"
     elif util.is_void_ptr(res_type):
@@ -372,7 +359,7 @@ def funcdecl_args_c(decl, prefix):
     return s
 
 
-def funcdecl_args_zig(decl, prefix):
+def funcdecl_args_vlang(decl, prefix):
     s = ""
     func_name = decl["name"]
     for param_decl in decl["params"]:
@@ -382,7 +369,7 @@ def funcdecl_args_zig(decl, prefix):
         param_type = check_override(
             f"{func_name}.{param_name}", default=param_decl["type"]
         )
-        s += f"{as_zig_arg_type(f'{wrap_keywords(param_name)} ', param_type, prefix)}"
+        s += f"{as_vlang_arg_type(f'{wrap_keywords(param_name)} ', param_type, prefix)}"
     return s
 
 
@@ -395,21 +382,21 @@ def funcdecl_result_c(decl, prefix):
     return as_c_arg_type(result_type, prefix)
 
 
-def funcdecl_result_zig(decl, prefix):
+def funcdecl_result_vlang(decl, prefix):
     func_name = decl["name"]
     decl_type = decl["type"]
     result_type = check_override(
         f"{func_name}.RESULT", default=decl_type[: decl_type.index("(")].strip()
     )
-    zig_res_type = as_zig_arg_type(None, result_type, prefix)
-    return zig_res_type
+    vlang_res_type = as_vlang_arg_type(None, result_type, prefix)
+    return vlang_res_type
 
 
 def gen_struct(decl, prefix):
     struct_name = check_override(decl["name"])
-    # zig_type = as_zig_struct_type(struct_name, prefix)
+    # vlang_type = as_vlang_struct_type(struct_name, prefix)
     l(f"pub struct C.{struct_name} {{")
-    l(f"pub mut:")
+    l("pub mut:")
     for field in decl["fields"]:
         field_name = check_override(field["name"])
         field_type = check_override(
@@ -423,16 +410,16 @@ def gen_struct(decl, prefix):
                 type_default_value(field_type) == "0"
                 or type_default_value(field_type) == "false"
             ):
-                l(f"    {field_name} {as_zig_prim_type(field_type)}")
+                l(f"    {field_name} {as_vlang_prim_type(field_type)}")
             else:
                 l(
-                    f"    {field_name} {as_zig_prim_type(field_type)} = {type_default_value(field_type)}"
+                    f"    {field_name} {as_vlang_prim_type(field_type)} = {type_default_value(field_type)}"
                 )
         elif is_struct_type(field_type):
-            l(f"    {field_name} {as_zig_struct_type(field_type, prefix)}")
+            l(f"    {field_name} {as_vlang_struct_type(field_type, prefix)}")
         elif is_enum_type(field_type):
             l(
-                f"    {field_name} {as_zig_enum_type(field_type, prefix)} = .{enum_default_item(field_type)}"
+                f"    {field_name} {as_vlang_enum_type(field_type, prefix)} = .{enum_default_item(field_type)}"
             )
         elif util.is_string_ptr(field_type):
             l(f"    {field_name} &u8 = unsafe {{ nil }}")
@@ -442,7 +429,7 @@ def gen_struct(decl, prefix):
             l(f"    {field_name}  voidptr")
         elif is_const_prim_ptr(field_type):
             l(
-                f"    {field_name}  &{as_zig_prim_type(util.extract_ptr_type(field_type))}"
+                f"    {field_name}  &{as_vlang_prim_type(util.extract_ptr_type(field_type))}"
             )
         elif util.is_func_ptr(field_type):
             l(
@@ -453,18 +440,18 @@ def gen_struct(decl, prefix):
             array_sizes = util.extract_array_sizes(field_type)
             if is_prim_type(array_type) or is_struct_type(array_type):
                 if is_prim_type(array_type):
-                    zig_type = as_zig_prim_type(array_type)
+                    vlang_type = as_vlang_prim_type(array_type)
                     def_val = type_default_value(array_type)
                 elif is_struct_type(array_type):
-                    zig_type = as_zig_struct_type(array_type, prefix)
+                    vlang_type = as_vlang_struct_type(array_type, prefix)
                     def_val = ""
                 elif is_enum_type(array_type):
-                    zig_type = as_zig_enum_type(array_type, prefix)
+                    vlang_type = as_vlang_enum_type(array_type, prefix)
                     def_val = ""
                 else:
                     sys.exit(f"ERROR gen_struct is_1d_array_type: {array_type}")
-                t0 = f"[{array_sizes[0]}]{zig_type}"
-                t1 = f"[{array_sizes[0]}]{zig_type}"
+                t0 = f"[{array_sizes[0]}]{vlang_type}"
+                t1 = f"[{array_sizes[0]}]{vlang_type}"
                 # TODO: , init: {def_val}
                 l(f"    {field_name} {t0} = {t1}{{}}")
             elif util.is_const_void_ptr(array_type):
@@ -480,22 +467,22 @@ def gen_struct(decl, prefix):
             array_type = util.extract_array_type(field_type)
             array_sizes = util.extract_array_sizes(field_type)
             if is_prim_type(array_type):
-                zig_type = as_zig_prim_type(array_type)
+                vlang_type = as_vlang_prim_type(array_type)
                 def_val = type_default_value(array_type)
             elif is_struct_type(array_type):
-                zig_type = as_zig_struct_type(array_type, prefix)
-                def_val = f"{zig_type}{{}}"
+                vlang_type = as_vlang_struct_type(array_type, prefix)
+                def_val = f"{vlang_type}{{}}"
             else:
                 sys.exit(f"ERROR gen_struct is_2d_array_type: {array_type}")
-            t0 = f"[{array_sizes[0]}][{array_sizes[1]}]{zig_type}"
+            t0 = f"[{array_sizes[0]}][{array_sizes[1]}]{vlang_type}"
             l(
-                f"    {field_name} {t0} = [{array_sizes[0]}][{array_sizes[1]}]{zig_type}{{init: [{array_sizes[1]}]{zig_type}{{init: {def_val}}}}}"
+                f"    {field_name} {t0} = [{array_sizes[0]}][{array_sizes[1]}]{vlang_type}{{init: [{array_sizes[1]}]{vlang_type}{{init: {def_val}}}}}"
             )
         else:
             sys.exit(f"ERROR gen_struct: {field_name}: {field_type}")
     l("}")
-    zig_type = as_zig_struct_type(struct_name, prefix)
-    l(f"pub type {zig_type} = C.{struct_name}")
+    vlang_type = as_vlang_struct_type(struct_name, prefix)
+    l(f"pub type {vlang_type} = C.{struct_name}")
     l("")
 
 
@@ -507,7 +494,7 @@ def gen_consts(decl, prefix):
 
 def gen_enum(decl, prefix):
     enum_name = check_override(decl["name"])
-    l(f"pub enum {as_zig_enum_type(enum_name, prefix)} as u32 {{")
+    l(f"pub enum {as_vlang_enum_type(enum_name, prefix)} as u32 {{")
     for item in decl["items"]:
         item_name = as_enum_item_name(check_override(item["name"]))
         if item_name != "force_u32":
@@ -524,24 +511,24 @@ def gen_func_c(decl, prefix):
     )
 
 
-def gen_func_zig(decl, prefix):
+def gen_func_vlang(decl, prefix):
     c_func_name = decl["name"]
-    zig_func_name = as_lower_snake_case(check_override(decl["name"]), prefix)
+    vlang_func_name = as_lower_snake_case(check_override(decl["name"]), prefix)
     if c_func_name in c_callbacks:
         # a simple forwarded C callback function
-        l(f"pub const {zig_func_name} = {c_func_name}")
+        l(f"pub const {vlang_func_name} = {c_func_name}")
     else:
-        zig_res_type = funcdecl_result_zig(decl, prefix)
-        if zig_res_type == "void":
-            l(f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {{")
+        vlang_res_type = funcdecl_result_vlang(decl, prefix)
+        if vlang_res_type == "void":
+            l(f"pub fn {vlang_func_name}({funcdecl_args_vlang(decl, prefix)}) {{")
         else:
             l(
-                f"pub fn {zig_func_name}({funcdecl_args_zig(decl, prefix)}) {zig_res_type} {{"
+                f"pub fn {vlang_func_name}({funcdecl_args_vlang(decl, prefix)}) {vlang_res_type} {{"
             )
-        if is_zig_string(zig_res_type):
-            # special case: convert C string to Zig string slice
+        if is_vlang_string(vlang_res_type):
+            # special case: convert C string to vlang string slice
             s = f"    return unsafe {{ cstring_to_vstring(C.{c_func_name}("
-        elif zig_res_type != "void":
+        elif vlang_res_type != "void":
             s = f"    return C.{c_func_name}("
         else:
             s = f"    C.{c_func_name}("
@@ -556,11 +543,11 @@ def gen_func_zig(decl, prefix):
                 s += f"vstring_to_cstring({arg_name})"
             else:
                 s += arg_name
-        if is_zig_string(zig_res_type):
-            s += f")"
+        if is_vlang_string(vlang_res_type):
+            s += ")"
         s += ")"
-        if is_zig_string(zig_res_type):
-            s += f" }}"
+        if is_vlang_string(vlang_res_type):
+            s += " }"
         l(s)
         l("}")
 
@@ -590,16 +577,89 @@ def gen_imports(inp, dep_prefixes):
 
 def gen_helpers(inp):
     l("// helper functions")
-    l("// helper function to convert a C string to a Zig string slice")
+    l("// helper function to convert a C string to a vlang string slice")
     l("fn vstring_to_cstring(v_str string) &u8 {")
     l("    return v_str.str")
     l("}")
+
+
+def gen_extra(inp):
+    if inp["prefix"] in ["sg_", "sapp_"]:
+        l("$if emscripten ? {")
+        l("  #flag -DSOKOL_GLES3")
+        l("  #flag -DSOKOL_NO_ENTRY")
+        l("  #flag -lGL -ldl")
+        l("  #flag -s MIN_WEBGL_VERSION=2")
+        l("  #flag -s MAX_WEBGL_VERSION=2")
+        l("  #flag -s ERROR_ON_UNDEFINED_SYMBOLS=0")
+        l("  #flag -s ASSERTIONS=1")
+        l("  #flag -s MODULARIZE")
+        l("}")
+        l("$if windows ? {")
+        l("  $if !msvc {")
+        l("    #flag -lgdi32")
+        l("    #flag -luser32")
+        l("    #flag -lshell32")
+        l("    #flag -lkernel32")
+        l("  }")
+        l("  // GL or D3D11")
+        l("  $if gl {")
+        l("    #flag -DSOKOL_GLCORE")
+        l("    #flag -lopengl32")
+        l("  }")
+        l("  $else {")
+        l("    #flag -DSOKOL_D3D11")
+        l("    $if !msvc {")
+        l("      #flag -ld3d11 -ldxgi")
+        l("    }")
+        l("  }")
+        l("}")
+        l("$if macos ? {")
+        l("  #flag -x -fobjc-arc")
+        l("  #flag -x objective-c")
+        l("  #flag -framework Cocoa -framework QuartzCore")
+        l("  // GL or Metal")
+        l("  $if darwin_sokol_glcore33 {")
+        l("    #flag -DSOKOL_GLCORE")
+        l("    #flag -framework OpenGL")
+        l("  }")
+        l("  $else {")
+        l("    #flag -DSOKOL_METAL")
+        l("    #flag -framework Metal -framework MetalKit")
+        l("  }")
+        l("}")
+        l("$if linux ? {")
+        l("  #flag -DSOKOL_GLCORE")
+        l("  #flag -lX11 -lXi -lXcursor -lGL -lm -ldl -lpthread")
+        l("}")
+    # if inp["prefix"] in ["saudio_"]:
+    # l("when defined windows:")
+    # l("  when not defined vcc:")
+    # l('    {.passl:"-lkernel32 -lole32".}')
+    # l("elif defined macosx:")
+    # l('  {.passl:"-framework AudioToolbox".}')
+    # l("elif defined linux:")
+    # l("  when not defined emscripten:")
+    # l('    {.passl:"-lasound -lm -lpthread".}')
+    # l("else:")
+    # l('  error("unsupported platform")')
+    # l("")
+    # NOTE: this simplistic to_Range() converter has various issues, some of them dangerous:
+    #   - doesn't work as expected for slice types
+    #   - it's very easy to create a range that points to invalid memory
+    #     (so far observed for stack-allocated structs <= 16 bytes)
+    # if inp['prefix'] in ['sg_', 'sdtx_', 'sshape_']:
+    #    l('# helper function')
+    c_source_path = "/".join(c_source_paths[inp["prefix"]].split("/")[3:])
+    l(f'#include "{c_source_path}"')
 
 
 def gen_module(inp, dep_prefixes):
     l("// machine generated, do not edit")
     l("")
     l(f'module {inp["module"]}')
+    l("")
+    # gen_extra(inp) # this is not needed since there is a manual declaration in the root module
     gen_imports(inp, dep_prefixes)
     gen_helpers(inp)
     pre_parse(inp)
@@ -616,7 +676,7 @@ def gen_module(inp, dep_prefixes):
                     gen_enum(decl, prefix)
                 elif kind == "func":
                     gen_func_c(decl, prefix)
-                    gen_func_zig(decl, prefix)
+                    gen_func_vlang(decl, prefix)
 
 
 def prepare():
@@ -628,7 +688,7 @@ def prepare():
 
 
 def gen(c_header_path, c_prefix, dep_c_prefixes):
-    if not c_prefix in module_names:
+    if c_prefix not in module_names:
         print(f" >> warning: skipping generation for {c_prefix} prefix...")
         return
     module_name = module_names[c_prefix]
